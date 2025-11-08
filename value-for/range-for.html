@@ -29,6 +29,12 @@
             keepfirstmsg: {
                 value: false
             },
+            store: {
+                value: ""
+            },
+            expired: {
+                value: "discard"
+            },
         },
         inputs: 1,
         outputs: 2,
@@ -47,8 +53,21 @@
             }
         },
         outputLabels: ["in range", "out of range"],
-        paletteLabel: "range for"
+        paletteLabel: "range for",
+        oneditprepare: function() {
+            // Populate context store dropdown
+            var stores = RED.settings.context.stores || [];
+            var $store = $("#node-input-store");
+            $store.empty();
+            stores.forEach(function(s) {
+                $("<option></option>").val(s).text(s).appendTo($store);
+            });
+            if (this.store && stores.indexOf(this.store) !== -1) {
+                $store.val(this.store);
+            }
+        }
     });
+
 </script>
 
 <script type="text/x-red" data-template-name="range-for">
@@ -85,7 +104,19 @@
             <span style="font-style: italic;">By default, the latest input message will be forwarded to the output. Select this checkbox to forward the very first message that matched the "value" instead.</span>
         </div>
     </div>
-</script>
+
+<div class="form-row">
+    <label for="node-input-store"><i class="fa fa-database"></i> Context store</label>
+    <select id="node-input-store" style="width:70%"></select>
+</div>
+<div class="form-row">
+    <label for="node-input-expired"><i class="fa fa-history"></i> Expired handling</label>
+    <select id="node-input-expired" style="width:70%">
+        <option value="discard">discard</option>
+        <option value="send">send anyway</option>
+        <option value="flag">flag and send</option>
+    </select>
+</div>
 
 <script type="text/x-red" data-help-name="range-for">
     <p>This node listens to numeric values in <code>msg.payload</code> input.

@@ -12,7 +12,7 @@ const reset = function(node, manual = false) {
             reset: 1,
         }
         node.send([null, msg]);
-        node.status({fill: "grey", shape: "dot", text: `${manual ? 'reset' : node.lastValue} ${getFormattedNow()}`});
+        // status message handled in value-for.js if needed
         clearTimer(node);
     }
     // Cleanup
@@ -24,7 +24,7 @@ const match = function(node, config, originalMsg) {
     // Start timer (if not yet started)
     if (node.timeout === null) {
         node.timeout = setTimeout(timerFn.bind(null, node, config), config.for);
-        node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
+        // status message handled in value-for.js if needed
     }
     // Store original message (first or latest)
     if (config.keepfirstmsg) {
@@ -39,18 +39,11 @@ const match = function(node, config, originalMsg) {
 const timerFn = function(node, config) {
     // Send 1st output message
     node.send([node.orignalMsg, null]);
-    node.status({fill: "green", shape: "dot", text: `${node.lastValue} ${getFormattedNow('since')}`});
+    // status message handled in value-for.js if needed
     if (config.continuous) {
         clearTimer(node);
         match(node, config, node.orignalMsg);
     }
-}
-
-const getFormattedNow = function(prefix = 'at') {
-    const now = new Date();
-    const dateTimeFormat = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', hour12: false, hour: 'numeric', minute: 'numeric' });
-    const [{ value: month },,{ value: day },,{ value: hour },,{ value: minute }] = dateTimeFormat.formatToParts(now);
-    return `${prefix}: ${month} ${day}, ${hour}:${minute}`;
 }
 
 module.exports.clearTimer = clearTimer

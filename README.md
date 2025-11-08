@@ -65,7 +65,32 @@ message will be `{ payload: null }`. Make sure your flow can handle this situati
 You can configure nodes to report just once after the range/value matched configuration or report continously 
 starting new timers each "for" time.
 
+### Persistence (added in v 1.0.5)
+* Each node stores its state in the selected [context store](https://nodered.org/docs/user-guide/context) (e.g. `localfilesystem`) so that:
+- Pending timers survive a Node-RED restart or redeploy.
+- Messages scheduled to fire *after* a restart will still be delivered at their original expiry time (or flagged if already expired).
+- Uses Node-RED context storage to remember pending timers.
+- When restarted:
+  - If a timer is still in the future, the message will be delivered at the correct time.
+  - If a timer has already expired during downtime, behavior is controlled by the **Expired handling** option.
+
+* Expired handling
+- When a message’s timer expires while Node-RED is offline, you can choose:
+
+  - **Discard** – Drop the expired message (default, no persistence).
+  - **Send anyway** – Deliver the message immediately on restart.
+  - **Flag and send** – Deliver the message and add:
+    - `msg.expired = true`
+    - `msg.triggerOriginalExpiry = <unix timestamp>`  
+    - Downstream nodes can decide whether to keep or discard it.
+
+
 ## Changelog
+
+#### 1.0.5
+
+* Added persistence across NodeRED restarts or redeployments
+* You must have a persistent context store configured for this to work 
 
 #### 1.0.0
 

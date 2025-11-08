@@ -1,28 +1,104 @@
+
 const { clearTimer, match, reset } = require('./common.js');
+
+// Local copy of getFormattedNow (was not exported in original common.js)
+function getFormattedNow(prefix = 'at') {
+    const now = new Date();
+    const dateTimeFormat = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', hour12: false, hour: 'numeric', minute: 'numeric' });
+    const [{ value: month },,{ value: day },,{ value: hour },,{ value: minute }] = dateTimeFormat.formatToParts(now);
+    return `${prefix}: ${month} ${day}, ${hour}:${minute}`;
+}
 
 module.exports = function(RED) {
 
     function FixedForNode(config) {
         RED.nodes.createNode(this, config);
-        this.timeout = null;
-        this.valueMatched = false;
-        this.lastValue = null;
-        this.orignalMsg = null;
+        let node = this;
+        node.timeout = null;
+        node.valueMatched = false;
+        node.lastValue = null;
+        node.orignalMsg = null;
 
+        // Context store and persistence key
+        node.store = config.store || undefined;
+        const STORE_KEY = "fixed-for:" + node.id;
+        let persisted = node.context().get(STORE_KEY, node.store) || null;
+
+        // Convert units
         if (config.units === "s") { config.for = config.for * 1000; }
         if (config.units === "min") { config.for = config.for * 1000 * 60; }
         if (config.units === "hr") { config.for = config.for * 1000 * 60 * 60; }
 
-        let node = this;
+        // --- Restore on start ---
+        (function restoreOnStart() {
+            if (persisted && persisted.expiry && persisted.orignalMsg) {
+                const now = Date.now();
+                if (persisted.expiry > now) {
+                    // Resume timer
+                    node.orignalMsg = persisted.orignalMsg;
+                    node.lastValue = persisted.lastValue;
+                    node.valueMatched = true;
+                    const remaining = persisted.expiry - now;
+                    node.timeout = setTimeout(function() {
+                        node.send([node.orignalMsg, null]);
+                        node.status({fill: "green", shape: "dot", text: `${node.lastValue} ${getFormattedNow('since')}`});
+                        node.context().set(STORE_KEY, undefined, node.store);
+                    }, remaining);
+                    node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
+                } else {
+                    // Expired while down
+                    if (config.expired === "send" || config.expired === "flag") {
+                        let outMsg = Object.assign({}, persisted.orignalMsg);
+                        if (config.expired === "flag") {
+                            outMsg.expired = true;
+                            outMsg.triggerOriginalExpiry = persisted.expiry;
+                        }
+                        setTimeout(function() {
+                            node.send([outMsg, null]);
+                            node.status({fill: "green", shape: "dot", text: `${node.lastValue} ${getFormattedNow('since')}`});
+                        }, 0);
+                    }
+                    node.context().set(STORE_KEY, undefined, node.store);
+                }
+            }
+        })();
+
+        function makePersistableClone(m) {
+            let clean;
+            try {
+                clean = RED.util.cloneMessage(m);
+            } catch(err) {
+                try { clean = JSON.parse(JSON.stringify(m)); } catch(e) { clean = {}; }
+            }
+            if (clean && typeof clean === "object") {
+                delete clean.req;
+                delete clean.res;
+                delete clean.socket;
+            }
+            return clean;
+        }
+
+        function persistState(expiry) {
+            try {
+                node.context().set(STORE_KEY, {
+                    expiry,
+                    orignalMsg: makePersistableClone(node.orignalMsg),
+                    lastValue: node.lastValue
+                }, node.store);
+            } catch (err) {
+                node.warn("fixed-for: failed to persist state: " + err);
+            }
+        }
 
         if (config.ondeploy) {
             match(node, config, { payload: null });
         }
 
-        this.on('input', function(msg) {
+        node.on('input', function(msg) {
             if (msg.hasOwnProperty('payload')) {
                 if (msg.payload === 'reset') {
                     reset(node, true);
+                    node.context().set(STORE_KEY, undefined, node.store);
                     return;
                 }
                 // Prepare current payload for comparion
@@ -43,15 +119,29 @@ module.exports = function(RED) {
                 node.lastValue = currentValue;
                 // Act
                 if (node.valueMatched) {
-                    match(node, config, msg);
+                    if (node.timeout === null) {
+                        node.orignalMsg = msg;
+                        node.timeout = setTimeout(function() {
+                            node.send([node.orignalMsg, null]);
+                            node.status({fill: "green", shape: "dot", text: `${node.lastValue} ${getFormattedNow('since')}`});
+                            node.context().set(STORE_KEY, undefined, node.store);
+                        }, config.for);
+                        persistState(Date.now() + config.for);
+                        node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
+                    } else {
+                        node.orignalMsg = msg;
+                        persistState(Date.now() + (config.for || 0));
+                        node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
+                    }
                 } else {
                     clearTimer(node);
                     match(node, config, msg);
+                    node.context().set(STORE_KEY, undefined, node.store);
                 }
             }
         });
 
-        this.on('close', function() {
+        node.on('close', function() {
             clearTimer(node);
         });
     }
