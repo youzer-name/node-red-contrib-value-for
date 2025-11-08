@@ -38,6 +38,9 @@ module.exports = function(RED) {
         const STORE_KEY = "value-for:" + node.id;
         let persisted = node.context().get(STORE_KEY, node.store) || null;
 
+        // Message property config
+        node.msgprop = config.msgprop && config.msgprop.trim() ? config.msgprop.trim() : 'payload';
+
         // Convert units
         if (config.units === "s") { config.for = config.for * 1000; }
         if (config.units === "min") { config.for = config.for * 1000 * 60; }
@@ -98,48 +101,44 @@ module.exports = function(RED) {
         }
 
         node.on('input', function(msg) {
-            if (msg.hasOwnProperty('payload')) {
-                if (msg.payload === 'reset') {
-                    reset(node, true);
-                    node.context().set(STORE_KEY, undefined, node.store);
-                    return;
+            let value = RED.util.getMessageProperty(msg, node.msgprop);
+            if (typeof value === 'undefined' && node.msgprop === 'payload') value = msg.payload; // fallback for legacy
+            if (value === 'reset') {
+                reset(node, true);
+                node.context().set(STORE_KEY, undefined, node.store);
+                return;
+            }
+            let currentValue = String(value);
+            if (!config.casesensitive) {
+                currentValue = currentValue.toLowerCase();
+            }
+            if (currentValue !== '') {
+                // Compare values
+                if (currentValue === config.value) {
+                    node.valueMatched = true;
+                } else {
+                    node.valueMatched = false;
                 }
-                // Prepare current payload for comparion
-                let currentValue = String(msg.payload);
-                if (!config.casesensitive) {
-                    currentValue = currentValue.toLowerCase();
-                }
-                if (currentValue !== '') {
-                    // Compare values
-                    if (currentValue === config.value) {
-                        node.valueMatched = true;
+                node.lastValue = currentValue;
+                // Act
+                if (node.valueMatched) {
+                    if (node.timeout === null) {
+                        node.orignalMsg = msg;
+                        node.timeout = setTimeout(function() {
+                            node.send([node.orignalMsg, null]);
+                            node.status({fill: "green", shape: "dot", text: `${node.lastValue} ${getFormattedNow('since')}`});
+                            node.context().set(STORE_KEY, undefined, node.store);
+                        }, config.for);
+                        persistState(Date.now() + config.for);
+                        node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
                     } else {
-                        node.valueMatched = false;
+                        node.orignalMsg = msg;
+                        persistState(Date.now() + (config.for || 0));
+                        node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
                     }
-                    node.lastValue = currentValue;
-                    // Act
-                    if (node.valueMatched) {
-                        if (node.timeout === null) {
-                            node.orignalMsg = msg;
-                            node.timeout = setTimeout(function() {
-                                node.send([node.orignalMsg, null]);
-                                node.status({fill: "green", shape: "dot", text: `${node.lastValue} ${getFormattedNow('since')}`});
-                                node.context().set(STORE_KEY, undefined, node.store);
-                            }, config.for);
-                            persistState(Date.now() + config.for);
-                            // Always set status when timer starts (original behavior)
-                            node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
-                        } else {
-                            // Timer already running, update message if needed
-                            node.orignalMsg = msg;
-                            persistState(Date.now() + (config.for || 0));
-                            // Also set status if timer is already running and value still matches (original behavior)
-                            node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
-                        }
-                    } else {
-                        reset(node);
-                        node.context().set(STORE_KEY, null, node.store);
-                    }
+                } else {
+                    reset(node);
+                    node.context().set(STORE_KEY, null, node.store);
                 }
             }
         });

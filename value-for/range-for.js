@@ -12,25 +12,28 @@ function getFormattedNow(prefix = 'at') {
 module.exports = function(RED) {
 
     function RangeForNode(config) {
-        RED.nodes.createNode(this, config);
-        let node = this;
-        node.timeout = null;
-        node.valueMatched = false;
-        node.lastValue = null;
-        node.orignalMsg = null;
+    RED.nodes.createNode(this, config);
+    let node = this;
+    node.timeout = null;
+    node.valueMatched = false;
+    node.lastValue = null;
+    node.orignalMsg = null;
 
-        // Context store and persistence key
-        node.store = config.store || undefined;
-        const STORE_KEY = "range-for:" + node.id;
-        let persisted = node.context().get(STORE_KEY, node.store) || null;
+    // Context store and persistence key
+    node.store = config.store || undefined;
+    const STORE_KEY = "range-for:" + node.id;
+    let persisted = node.context().get(STORE_KEY, node.store) || null;
 
-        // Convert units
-        if (config.units === "s") { config.for = config.for * 1000; }
-        if (config.units === "min") { config.for = config.for * 1000 * 60; }
-        if (config.units === "hr") { config.for = config.for * 1000 * 60 * 60; }
+    // Message property config
+    node.msgprop = config.msgprop && config.msgprop.trim() ? config.msgprop.trim() : 'payload';
 
-        if (config.below === "") { config.below = null; } else { config.below = Number(config.below) }
-        if (config.above === "") { config.above = null; } else { config.above = Number(config.above) }
+    // Convert units
+    if (config.units === "s") { config.for = config.for * 1000; }
+    if (config.units === "min") { config.for = config.for * 1000 * 60; }
+    if (config.units === "hr") { config.for = config.for * 1000 * 60 * 60; }
+
+    if (config.below === "") { config.below = null; } else { config.below = Number(config.below) }
+    if (config.above === "") { config.above = null; } else { config.above = Number(config.above) }
 
         // --- Restore on start ---
         (function restoreOnStart() {
@@ -94,62 +97,61 @@ module.exports = function(RED) {
         }
 
         node.on('input', function(msg) {
-            if (msg.hasOwnProperty('payload')) {
-                if (msg.payload === 'reset') {
-                    reset(node, true);
-                    node.context().set(STORE_KEY, undefined, node.store);
-                    return;
-                }
-                // Prepare current payload for comparion
-                let currentValue = Number(msg.payload);
-                if (!isNaN(currentValue)) {
-                    // Compare values
-                    if (config.below !== null && config.above !== null) {
-                        // Above AND below set
-                        if (currentValue > config.above && currentValue < config.below) {
+            let value = RED.util.getMessageProperty(msg, node.msgprop);
+            if (typeof value === 'undefined' && node.msgprop === 'payload') value = msg.payload; // fallback for legacy
+            if (value === 'reset') {
+                reset(node, true);
+                node.context().set(STORE_KEY, undefined, node.store);
+                return;
+            }
+            let currentValue = Number(value);
+            if (!isNaN(currentValue)) {
+                // Compare values
+                if (config.below !== null && config.above !== null) {
+                    // Above AND below set
+                    if (currentValue > config.above && currentValue < config.below) {
+                        node.valueMatched = true;
+                    } else {
+                        node.valueMatched = false;
+                    }
+                } else {
+                    // ONLY below set
+                    if (config.below !== null) {
+                        if (currentValue < config.below) {
                             node.valueMatched = true;
                         } else {
                             node.valueMatched = false;
                         }
-                    } else {
-                        // ONLY below set
-                        if (config.below !== null) {
-                            if (currentValue < config.below) {
-                                node.valueMatched = true;
-                            } else {
-                                node.valueMatched = false;
-                            }
-                        }
-                        // ONLY above set
-                        if (config.above !== null) {
-                            if (currentValue > config.above) {
-                                node.valueMatched = true;
-                            } else {
-                                node.valueMatched = false;
-                            }
-                        }
                     }
-                    node.lastValue = currentValue;
-                    // Act
-                    if (node.valueMatched) {
-                        if (node.timeout === null) {
-                            node.orignalMsg = msg;
-                            node.timeout = setTimeout(function() {
-                                node.send([node.orignalMsg, null]);
-                                node.status({fill: "green", shape: "dot", text: `${node.lastValue} ${getFormattedNow('since')}`});
-                                node.context().set(STORE_KEY, undefined, node.store);
-                            }, config.for);
-                            persistState(Date.now() + config.for);
-                            node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
+                    // ONLY above set
+                    if (config.above !== null) {
+                        if (currentValue > config.above) {
+                            node.valueMatched = true;
                         } else {
-                            node.orignalMsg = msg;
-                            persistState(Date.now() + (config.for || 0));
-                            node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
+                            node.valueMatched = false;
                         }
-                    } else {
-                        reset(node);
-                        node.context().set(STORE_KEY, undefined, node.store);
                     }
+                }
+                node.lastValue = currentValue;
+                // Act
+                if (node.valueMatched) {
+                    if (node.timeout === null) {
+                        node.orignalMsg = msg;
+                        node.timeout = setTimeout(function() {
+                            node.send([node.orignalMsg, null]);
+                            node.status({fill: "green", shape: "dot", text: `${node.lastValue} ${getFormattedNow('since')}`});
+                            node.context().set(STORE_KEY, undefined, node.store);
+                        }, config.for);
+                        persistState(Date.now() + config.for);
+                        node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
+                    } else {
+                        node.orignalMsg = msg;
+                        persistState(Date.now() + (config.for || 0));
+                        node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
+                    }
+                } else {
+                    reset(node);
+                    node.context().set(STORE_KEY, undefined, node.store);
                 }
             }
         });

@@ -91,6 +91,9 @@ starting new timers each "for" time.
 
 * Added persistence across NodeRED restarts or redeployments
 * You must have a persistent context store configured for this to work 
+* Added field for user-selectable msg property to track.  Defaults to msg.payload
+  - When using a msg part like msg.payload.value, a subsequent message that is missing that part will be seen as an undefined/changed value
+  - So msg.payload.value =2, followed by msg.payload ="hello" would be seen as a change to the value being evaluated by the node
 
 #### 1.0.0
 

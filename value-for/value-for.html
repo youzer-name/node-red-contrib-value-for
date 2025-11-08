@@ -10,6 +10,9 @@
                 value: "",
                 required: true
             },
+            msgprop: {
+                value: "payload"
+            },
             casesensitive: {
                 value: false
             },
@@ -73,6 +76,10 @@
     <div class="form-row">
         <label for="node-input-value"><img src="red/images/typedInput/az.svg" style="margin-right: 4px;height: 18px;"> Value</label>
         <input type="text" id="node-input-value" placeholder="value">
+    </div>
+    <div class="form-row">
+        <label for="node-input-msgprop"><i class="fa fa-sign-in"></i> Message property</label>
+        <input type="text" id="node-input-msgprop" placeholder="msg.payload" style="width:70%">
     </div>
     <div class="form-row">
         <input type="checkbox" id="node-input-casesensitive" style="display: inline-block; width: auto; vertical-align: top;">

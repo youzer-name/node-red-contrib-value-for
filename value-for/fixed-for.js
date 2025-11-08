@@ -12,22 +12,25 @@ function getFormattedNow(prefix = 'at') {
 module.exports = function(RED) {
 
     function FixedForNode(config) {
-        RED.nodes.createNode(this, config);
-        let node = this;
-        node.timeout = null;
-        node.valueMatched = false;
-        node.lastValue = null;
-        node.orignalMsg = null;
+    RED.nodes.createNode(this, config);
+    let node = this;
+    node.timeout = null;
+    node.valueMatched = false;
+    node.lastValue = null;
+    node.orignalMsg = null;
 
-        // Context store and persistence key
-        node.store = config.store || undefined;
-        const STORE_KEY = "fixed-for:" + node.id;
-        let persisted = node.context().get(STORE_KEY, node.store) || null;
+    // Context store and persistence key
+    node.store = config.store || undefined;
+    const STORE_KEY = "fixed-for:" + node.id;
+    let persisted = node.context().get(STORE_KEY, node.store) || null;
 
-        // Convert units
-        if (config.units === "s") { config.for = config.for * 1000; }
-        if (config.units === "min") { config.for = config.for * 1000 * 60; }
-        if (config.units === "hr") { config.for = config.for * 1000 * 60 * 60; }
+    // Message property config
+    node.msgprop = config.msgprop && config.msgprop.trim() ? config.msgprop.trim() : 'payload';
+
+    // Convert units
+    if (config.units === "s") { config.for = config.for * 1000; }
+    if (config.units === "min") { config.for = config.for * 1000 * 60; }
+    if (config.units === "hr") { config.for = config.for * 1000 * 60 * 60; }
 
         // --- Restore on start ---
         (function restoreOnStart() {
@@ -95,49 +98,48 @@ module.exports = function(RED) {
         }
 
         node.on('input', function(msg) {
-            if (msg.hasOwnProperty('payload')) {
-                if (msg.payload === 'reset') {
-                    reset(node, true);
-                    node.context().set(STORE_KEY, undefined, node.store);
-                    return;
-                }
-                // Prepare current payload for comparion
-                let currentValue = String(msg.payload);
-                if (!config.casesensitive) {
-                    currentValue = currentValue.toLowerCase();
-                }
-                // On 1st-time deployment - make sure there is a `lastValue`
-                if (!node.lastValue) {
-                    node.lastValue = currentValue;
-                }
-                // Compare values
-                if (currentValue === node.lastValue) {
-                    node.valueMatched = true;
-                } else {
-                    node.valueMatched = false;
-                }
+            let value = RED.util.getMessageProperty(msg, node.msgprop);
+            if (typeof value === 'undefined' && node.msgprop === 'payload') value = msg.payload; // fallback for legacy
+            if (value === 'reset') {
+                reset(node, true);
+                node.context().set(STORE_KEY, undefined, node.store);
+                return;
+            }
+            let currentValue = String(value);
+            if (!config.casesensitive) {
+                currentValue = currentValue.toLowerCase();
+            }
+            // On 1st-time deployment - make sure there is a `lastValue`
+            if (!node.lastValue) {
                 node.lastValue = currentValue;
-                // Act
-                if (node.valueMatched) {
-                    if (node.timeout === null) {
-                        node.orignalMsg = msg;
-                        node.timeout = setTimeout(function() {
-                            node.send([node.orignalMsg, null]);
-                            node.status({fill: "green", shape: "dot", text: `${node.lastValue} ${getFormattedNow('since')}`});
-                            node.context().set(STORE_KEY, undefined, node.store);
-                        }, config.for);
-                        persistState(Date.now() + config.for);
-                        node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
-                    } else {
-                        node.orignalMsg = msg;
-                        persistState(Date.now() + (config.for || 0));
-                        node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
-                    }
+            }
+            // Compare values
+            if (currentValue === node.lastValue) {
+                node.valueMatched = true;
+            } else {
+                node.valueMatched = false;
+            }
+            node.lastValue = currentValue;
+            // Act
+            if (node.valueMatched) {
+                if (node.timeout === null) {
+                    node.orignalMsg = msg;
+                    node.timeout = setTimeout(function() {
+                        node.send([node.orignalMsg, null]);
+                        node.status({fill: "green", shape: "dot", text: `${node.lastValue} ${getFormattedNow('since')}`});
+                        node.context().set(STORE_KEY, undefined, node.store);
+                    }, config.for);
+                    persistState(Date.now() + config.for);
+                    node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
                 } else {
-                    clearTimer(node);
-                    match(node, config, msg);
-                    node.context().set(STORE_KEY, undefined, node.store);
+                    node.orignalMsg = msg;
+                    persistState(Date.now() + (config.for || 0));
+                    node.status({fill: "green", shape: "ring", text: `${node.lastValue} ${getFormattedNow()}`});
                 }
+            } else {
+                clearTimer(node);
+                match(node, config, msg);
+                node.context().set(STORE_KEY, undefined, node.store);
             }
         });
 

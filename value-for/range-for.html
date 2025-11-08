@@ -4,6 +4,7 @@
         color: '#E6E0F8',
         defaults: {
             name: {value: ""},
+            msgprop: {value: "payload"},
             above: {
                 value: null,
                 required: false,
@@ -74,6 +75,10 @@
     <div class="form-row">
         <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
         <input type="text" id="node-input-name" placeholder="name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-msgprop"><i class="fa fa-sign-in"></i> Message property</label>
+        <input type="text" id="node-input-msgprop" placeholder="msg.payload" style="width:70%">
     </div>
     <div class="form-row">
         <label for="node-input-above"><i class="fa fa-chevron-up"></i> Above</label>
