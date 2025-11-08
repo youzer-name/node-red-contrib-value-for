@@ -1,6 +1,6 @@
 This package provides two nodes that compare string or numeric values to message payloads.
 If input string equals configured value or input value is in configured range - starts timer
-for configured period of time. If input value won't excurse from configured for given period
+for configured period of time. If input value doesn't vary from configured for given period
 of time – will trigger single message to 1st output. 2nd output is used for reporting reset.
 
 # Installation
@@ -16,17 +16,17 @@ and if yes - report that fact on output.
 This library is similar to (and inspired by) [node-red-contrib-edge-trigger](https://github.com/eschava/node-red-contrib-edge-trigger)
 which you can use to listen for numeric value change "over", "below" or "out of range", but you cannot listen to value 
 change "inside the range" or string input. `node-red-contrib-value-for` also adds `for` parameter to listen if value 
-haven't excursed from configured range/value for given period of time.
+haven't been outside of the configured range/value for given period of time.
 
 ## Usage
 
 ### range-for
 
 Takes `above` and/or `below` numeric values to describe a values range. Once input value matches the range, starts 
-a timer with given `for` period. If incoming input values won't excurse from that range – will trigger single output 
+a timer with given `for` period. If incoming input values stay inside that range – will trigger single output 
 after configured period.
 
-Any input value that excure from configured range or input `msg.payload = "reset"` will reset the timer and trigger 
+Any input value that are outside the configured range or input `msg.payload = "reset"` will reset the timer and trigger 
 a second output once.
 
 ![range-for node](https://github.com/cadavre/node-red-contrib-value-for/raw/master/images/range-for.png)
@@ -40,7 +40,7 @@ output after configured period.
 Any input value different from configured value or input `msg.payload = "reset"` will reset the timer and trigger 
 a second output once.
 
-**Values are compared as strings!** Therefor you can choose to make case (in)sensitive matching.
+**Values are compared as strings!** Therefore you can choose to make case (in)sensitive matching.
 
 ![value-for node](https://github.com/cadavre/node-red-contrib-value-for/raw/master/images/value-for.png)
 
@@ -56,33 +56,34 @@ trigger first output. This is helpful for critical messages that must be compare
 **Watch out!** When using timer since (re)deployment – if no message was received in the input – the output 
 message will be `{ payload: null }`. Make sure your flow can handle this situation correctly!
 
-**Values are compared as strings!** Therefor you can choose to make case (in)sensitive matching.
+**Values are compared as strings!** Therefore you can choose to make case (in)sensitive matching.
 
 ![fixed-for node](https://github.com/cadavre/node-red-contrib-value-for/raw/master/images/fixed-for.png)
 
 ### Generic options
 
 You can configure nodes to report just once after the range/value matched configuration or report continously 
-starting new timers each "for" time.
+starting new timers after each "for" time.
+
+### Message Property
+By default the node uses the msg.payload as the value being tracked.  The user can specify a different message property in this field.
+  - When using a msg part like msg.payload.value, a subsequent message that is missing that part will be seen as an undefined/changed value
+    - So if the node is set to "msg.payload.value", the first message has msg.payload.value=2, and the next message has msg.payload =2, that would be seen as a change to the value being evaluated by the node because msg.payload.value is undefined in the second message.
 
 ### Persistence (added in v 1.0.5)
 * Each node stores its state in the selected [context store](https://nodered.org/docs/user-guide/context) (e.g. `localfilesystem`) so that:
 - Pending timers survive a Node-RED restart or redeploy.
 - Messages scheduled to fire *after* a restart will still be delivered at their original expiry time (or flagged if already expired).
-- Uses Node-RED context storage to remember pending timers.
 - When restarted:
   - If a timer is still in the future, the message will be delivered at the correct time.
   - If a timer has already expired during downtime, behavior is controlled by the **Expired handling** option.
-
-* Expired handling
-- When a message’s timer expires while Node-RED is offline, you can choose:
-
-  - **Discard** – Drop the expired message (default, no persistence).
-  - **Send anyway** – Deliver the message immediately on restart.
-  - **Flag and send** – Deliver the message and add:
-    - `msg.expired = true`
-    - `msg.triggerOriginalExpiry = <unix timestamp>`  
-    - Downstream nodes can decide whether to keep or discard it.
+  - When a message’s timer expires while Node-RED is offline, you can choose:
+    - **Discard** – Drop the expired message (default, no persistence).
+    - **Send anyway** – Deliver the message immediately on restart.
+    - **Flag and send** – Deliver the message and add:
+      - `msg.expired = true`
+      - `msg.triggerOriginalExpiry = <unix timestamp>`  
+      - Downstream nodes can use those values to decide whether to keep or discard it.
 
 
 ## Changelog
@@ -90,10 +91,8 @@ starting new timers each "for" time.
 #### 1.0.5
 
 * Added persistence across NodeRED restarts or redeployments
-* You must have a persistent context store configured for this to work 
+  * You must have a persistent context store configured for this to work 
 * Added field for user-selectable msg property to track.  Defaults to msg.payload
-  - When using a msg part like msg.payload.value, a subsequent message that is missing that part will be seen as an undefined/changed value
-  - So msg.payload.value =2, followed by msg.payload ="hello" would be seen as a change to the value being evaluated by the node
 
 #### 1.0.0
 
