@@ -1,7 +1,8 @@
-This package provides two nodes that compare string or numeric values to message payloads.
-If input string equals configured value or input value is in configured range - starts timer
-for configured period of time. If input value doesn't vary from configured for given period
-of time – will trigger single message to 1st output. 2nd output is used for reporting reset.
+This package provides three nodes that allow you to pass messages to an output only when:
+
+- A value stays in a certain range for a selected period of time (range-for)
+- A value equals a certain value for a selected period of time (value-for)
+- A value does NOT change for a selected period of time (fixed-for)
 
 # Installation
 ```
